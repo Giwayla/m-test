@@ -43,6 +43,7 @@ using Miningcore.Util;
 using Newtonsoft.Json;
 using NLog;
 using Contract = Miningcore.Contracts.Contract;
+using Miningcore.Blockchain.Equihash;
 
 namespace Miningcore.Stratum
 {
