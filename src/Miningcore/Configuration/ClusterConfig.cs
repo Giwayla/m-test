@@ -348,7 +348,8 @@ namespace Miningcore.Configuration
     {
         // ReSharper disable once InconsistentNaming
         PPLNS = 1,
-        Solo
+        PROP = 2,
+        SOLO = 3
     }
 
     public partial class ClusterLoggingConfig

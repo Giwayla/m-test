@@ -59,9 +59,9 @@ namespace Miningcore.Mining
         private readonly IShareRepository shareRepo;
         private readonly CancellationTokenSource cts = new CancellationTokenSource();
         private readonly ConcurrentDictionary<string, IMiningPool> pools = new ConcurrentDictionary<string, IMiningPool>();
-        private readonly TimeSpan interval = TimeSpan.FromMinutes(5);
-        private const int HashrateCalculationWindow = 1200; // seconds
-        private const int MinHashrateCalculationWindow = 300; // seconds
+        private readonly TimeSpan interval = TimeSpan.FromMinutes(1);
+        private const int HashrateCalculationWindow = 300; // seconds
+        private const int MinHashrateCalculationWindow = 180; // seconds
         private const double HashrateBoostFactor = 1.1d;
         private ClusterConfig clusterConfig;
         private const int RetryCount = 4;
@@ -145,6 +145,12 @@ namespace Miningcore.Mining
 
                 if(result.Length > 0)
                 {
+                    var workerCount = 0;
+                    foreach(var workers in byMiner)
+                    {
+                        workerCount += workers.Count();
+                    }
+                    
                     // calculate pool stats
                     var windowActual = (result.Max(x => x.LastShare) - result.Min(x => x.FirstShare)).TotalSeconds;
 
@@ -156,6 +162,7 @@ namespace Miningcore.Mining
 
                         // update
                         pool.PoolStats.ConnectedMiners = byMiner.Length;
+                        pool.PoolStats.ConnectedWorkers = workerCount;
                         pool.PoolStats.PoolHashrate = (ulong) Math.Ceiling(poolHashrate);
                         pool.PoolStats.SharesPerSecond = (int) (poolHashesCountAccumulated / windowActual);
 
@@ -167,6 +174,7 @@ namespace Miningcore.Mining
                 {
                     // reset
                     pool.PoolStats.ConnectedMiners = 0;
+                    pool.PoolStats.ConnectedWorkers = 0;
                     pool.PoolStats.PoolHashrate = 0;
                     pool.PoolStats.SharesPerSecond = 0;
 
@@ -262,11 +270,11 @@ namespace Miningcore.Mining
 
                     foreach(var item in orphanedHashrateForMinerWorker)
                     {
-                        var parts = item.Split(":");
+                        var parts = item.Split(".");
                         var miner = parts[0];
-                        var worker = parts.Length > 1 ? parts[1] : null;
+                        var worker = parts.Length > 1 ? parts[1] : "0";
 
-                        stats.Miner = parts[0];
+                        stats.Miner = miner;
                         stats.Worker = worker;
 
                         // persist

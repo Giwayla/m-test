@@ -92,8 +92,10 @@ namespace Miningcore.Blockchain.Ethereum
             // setup worker context
             context.IsSubscribed = true;
             context.UserAgent = requestParams[0].Trim();
+            context.IsNiceHashClient = true;
         }
 
+        #region EthereumStratum/1.0.0
         private async Task OnAuthorizeAsync(StratumClient client, Timestamped<JsonRpcRequest> tsRequest)
         {
             var request = tsRequest.Value;
@@ -103,19 +105,20 @@ namespace Miningcore.Blockchain.Ethereum
                 throw new StratumException(StratumError.MinusOne, "missing request id");
 
             var requestParams = request.ParamsAs<string[]>();
-            var workerValue = requestParams?.Length > 0 ? requestParams[0] : null;
+            var workerValue = requestParams?.Length > 0 ? requestParams[0] : "0";
             var password = requestParams?.Length > 1 ? requestParams[1] : null;
             var passParts = password?.Split(PasswordControlVarsSeparator);
 
             // extract worker/miner
             var workerParts = workerValue?.Split('.');
             var minerName = workerParts?.Length > 0 ? workerParts[0].Trim() : null;
-            var workerName = workerParts?.Length > 1 ? workerParts[1].Trim() : null;
+            var workerName = workerParts?.Length > 1 ? workerParts[1].Trim() : "0";
 
             // assumes that workerName is an address
             context.IsAuthorized = !string.IsNullOrEmpty(minerName) && manager.ValidateAddress(minerName);
             context.Miner = minerName;
             context.Worker = workerName;
+            context.IsNiceHashClient = true;
 
             // respond
             await client.RespondAsync(context.IsAuthorized, request.Id);
@@ -266,7 +269,8 @@ namespace Miningcore.Blockchain.Ethereum
                         await client.NotifyAsync(EthereumStratumMethods.SetDifficulty, new object[] { context.Difficulty });
 
                     // send job
-                    await client.NotifyAsync(EthereumStratumMethods.MiningNotify, currentJobParams);
+                    if(context.IsNiceHashClient)
+                        await client.NotifyAsync(EthereumStratumMethods.MiningNotify, currentJobParams);
                 }
             });
 
@@ -335,6 +339,7 @@ namespace Miningcore.Blockchain.Ethereum
             {
                 switch(request.Method)
                 {
+                    #region EthereumStratum/1.0.0
                     case EthereumStratumMethods.Subscribe:
                         await OnSubscribeAsync(client, tsRequest);
                         break;
@@ -350,6 +355,25 @@ namespace Miningcore.Blockchain.Ethereum
                     case EthereumStratumMethods.ExtraNonceSubscribe:
                         await client.RespondErrorAsync(StratumError.Other, "not supported", request.Id, false);
                         break;
+                    #endregion
+
+                    #region Stratum-Proxy
+                    case EthereumStratumMethods.SubmitLogin:
+                        await OnSubmitLoginAsync(client, tsRequest);
+                        break;
+
+                    case EthereumStratumMethods.GetWork:
+                        await OnGetWorkAsync(client, tsRequest);
+                        break;
+
+                    case EthereumStratumMethods.SubmitHasrate:
+                        await OnSubmitHashrateAsync(client, tsRequest);
+                        break;
+
+                    case EthereumStratumMethods.SubmitWork:
+                        await OnSubmitAsync(client, tsRequest, ct);
+                        break;
+                    #endregion  
 
                     default:
                         logger.Debug(() => $"[{client.ConnectionId}] Unsupported RPC request: {JsonConvert.SerializeObject(request, serializerSettings)}");
@@ -384,7 +408,9 @@ namespace Miningcore.Blockchain.Ethereum
 
                 // send job
                 await client.NotifyAsync(EthereumStratumMethods.SetDifficulty, new object[] { context.Difficulty });
-                await client.NotifyAsync(EthereumStratumMethods.MiningNotify, currentJobParams);
+
+                if(context.IsNiceHashClient)
+                    await client.NotifyAsync(EthereumStratumMethods.MiningNotify, currentJobParams);
             }
         }
 
